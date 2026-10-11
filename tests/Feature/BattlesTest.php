@@ -28,17 +28,6 @@ function player(string $name = 'tobi_codes', string $state = 'KW'): array
     return ['Authorization' => "Bearer {$t}"];
 }
 
-/** Display index of the right answer for this entry's $index-th question (test helper; reads the answer key). */
-function right(string $entryId, int $index): int
-{
-    $e = DB::table('entries')->where('id', $entryId)->first();
-    $ids = json_decode(DB::table('battles')->where('id', $e->battle_id)->value(DB::raw('array_to_json(question_ids)')), true);
-    $qid = $ids[Scoring::questionOrder((int) $e->seed, count($ids))[$index]];
-    $answer = (int) DB::table('questions')->where('id', $qid)->value('answer');
-
-    return Scoring::toDisplay(Scoring::optionOrder((int) $e->seed, $index), $answer);
-}
-
 it('refuses to start outside the window', function () {
     Carbon::setTestNow(Carbon::createFromTimestampMs($this->times['opensAt'] - 60_000));
     $this->postJson('/v1/entries', [], player())->assertStatus(425)

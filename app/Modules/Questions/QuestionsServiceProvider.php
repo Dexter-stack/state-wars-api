@@ -5,11 +5,13 @@ namespace App\Modules\Questions;
 use App\Core\Support\ModuleServiceProvider;
 use App\Modules\Questions\Repositories\Contracts\QuestionsRepository;
 use App\Modules\Questions\Repositories\PgQuestionsRepository;
+use App\Modules\Questions\Services\QuestionsService;
 
 final class QuestionsServiceProvider extends ModuleServiceProvider
 {
     public array $singletons = [
         QuestionsRepository::class => PgQuestionsRepository::class,
+        QuestionsService::class => QuestionsService::class,
     ];
 
     public function boot(): void

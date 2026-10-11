@@ -5,11 +5,13 @@ namespace App\Modules\Derbies;
 use App\Core\Support\ModuleServiceProvider;
 use App\Modules\Derbies\Repositories\Contracts\DerbiesRepository;
 use App\Modules\Derbies\Repositories\PgDerbiesRepository;
+use App\Modules\Derbies\Services\DerbiesService;
 
 final class DerbiesServiceProvider extends ModuleServiceProvider
 {
     public array $singletons = [
         DerbiesRepository::class => PgDerbiesRepository::class,
+        DerbiesService::class => DerbiesService::class,
     ];
 
     public function boot(): void

@@ -6,6 +6,7 @@ use App\Core\Support\ModuleServiceProvider;
 use App\Modules\Leaderboard\Repositories\Contracts\ResultsRepository;
 use App\Modules\Leaderboard\Repositories\PgResultsRepository;
 use App\Modules\Leaderboard\Services\LeaderboardService;
+use App\Modules\Leaderboard\Services\TableService;
 use App\Modules\Leaderboard\Stores\Contracts\LiveScoreStore;
 use App\Modules\Leaderboard\Stores\RedisLiveScoreStore;
 use Illuminate\Support\Facades\Redis;
@@ -15,6 +16,7 @@ final class LeaderboardServiceProvider extends ModuleServiceProvider
     public array $singletons = [
         ResultsRepository::class => PgResultsRepository::class,
         LeaderboardService::class => LeaderboardService::class,
+        TableService::class => TableService::class,
     ];
 
     public function register(): void

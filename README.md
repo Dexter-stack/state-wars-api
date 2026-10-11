@@ -20,12 +20,14 @@ php artisan db:seed             # sample data and today's battle (refuses in pro
 # RoadRunner needs ext-sockets; php-ini/ loads it for this project only (XAMPP's php.ini is untouched)
 $env:PHP_INI_SCAN_DIR = "$PWD\php-ini"
 php vendor/bin/rr get-binary -f 2025.1.15        # once: downloads rr.exe (about 60 MB)
-php artisan octane:start --server=roadrunner --port=8080 --workers=8 --max-requests=1000 --rr-config=.rr.yaml
+.\serve-windows.ps1              # API on port 8080 with 8 workers (-Port, -Workers to change)
 
 # in two other terminals
 php artisan queue:work redis      # jobs (Horizon in production; it needs pcntl, which Windows PHP lacks)
 php artisan schedule:work         # prepare-day at 00:05 WAT, sweep every minute
 ```
+
+`php artisan octane:start` does not run on Windows (it needs POSIX signal constants), so `serve-windows.ps1` starts RoadRunner with the same options. On Linux use `octane:start` as in the Dockerfile.
 
 `DEV_ALWAYS_OPEN=true` (in `.env.example`) lets you play a battle at any time and see answers straight away. The app refuses to boot with it in production.
 
@@ -33,7 +35,7 @@ php artisan schedule:work         # prepare-day at 00:05 WAT, sweep every minute
 
 | Command | Does |
 |---|---|
-| `php artisan octane:start --server=roadrunner …` | API (see above) |
+| `.\serve-windows.ps1` (Windows) · `php artisan octane:start --server=roadrunner …` (Linux) | API |
 | `php artisan horizon` | Queue workers (Linux) |
 | `php artisan schedule:work` | Scheduler: `prepare-day` 00:05 WAT, `sweep` every minute |
 | `php artisan migrate` | Apply database migrations |

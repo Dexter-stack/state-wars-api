@@ -104,7 +104,7 @@ Nothing is escaped by hand, which matters for `options`, whose text can contain 
 | | Windows dev machine (no Docker) | Production (Linux) |
 |---|---|---|
 | PHP | 8.2 (XAMPP) | 8.3+ |
-| Server | Octane + RoadRunner (`rr.exe`) | Octane + RoadRunner (Dockerfile) |
+| Server | RoadRunner (`rr.exe`) with Octane's worker, started by `serve-windows.ps1` (`octane:start` needs POSIX signals) | `octane:start --server=roadrunner` (Dockerfile) |
 | Redis client | predis | phpredis (chosen automatically when the extension is loaded) |
 | Queue | `queue:work` | Horizon (needs `pcntl`) |
 | `ext-sockets` for RoadRunner | loaded only for this project via `PHP_INI_SCAN_DIR=php-ini` | in the image |
@@ -116,11 +116,23 @@ Nothing is escaped by hand, which matters for `options`, whose text can contain 
   - 1,000 golden shuffle vectors from the Node source.
   - Architecture rules.
   - Feature tests for every endpoint against PostgreSQL 16 and Redis. These cover concurrent duplicate answers, an exactly-once finish, the reveal lock, idempotent close jobs, the rate-limit shape, Cache-Control and the transaction rollback.
-- **Black-box scripts from the Node repo: not yet run against this server.** The Windows dev machine ran out of disk space (0 GB free on C:) before the RoadRunner binary could be installed. See "Load test results".
+- **Black-box scripts from the Node repo**, unmodified, against this server on RoadRunner: smoke 28/28, and the 500-player burst. k6 was not run. See "Load test results".
 
 ## Load test results
 
-_Pending: smoke (28 checks), burst (500 players) and k6 have not been run yet. Each run's numbers, machine and settings will be recorded here._
+Run on 2026-10-11 on the Windows dev machine: Intel i7-6600U (2 cores / 4 threads), 8 GB RAM, with PostgreSQL 16, Redis, the API and the test client all on the same machine. PHP 8.2 (XAMPP, no OPcache), predis, RoadRunner 2025.1.15 with 8 Octane workers, started with `serve-windows.ps1`. These numbers show correctness under contention, not production capacity.
+
+| Test | Result |
+|---|---|
+| `test/load/smoke.mjs` | 28 of 28 checks pass |
+| `test/load/burst.mjs 500` | 500 of 500 players completed; 8,065 requests in 61.4s (131 requests/s); p50 3.7s, p95 7.0s, p99 7.4s; 0 server errors; 0 failed players; no duplicate-answer mismatches |
+| `statewars:verify-battle` after the burst | 5,010 answer rows, 5,010 distinct `(entry_id, q_index)`; Redis player counts and sums equal Postgres for all 8 states, and equal the totals the burst script expected |
+| `loadtest/battle.k6.js` | Not run: k6 is not installed on this machine |
+
+Notes on the burst:
+- Rate limits were raised for the run (`RATE_GLOBAL_PER_MIN` and `RATE_AUTH_PER_HOUR` set to 1,000,000), because all 500 players come from one IP.
+- Latency is high because 500 players queue for 8 workers on 2 cores that are shared with the database, Redis and the client. It has not been measured on production-like hardware.
+- Two earlier attempts ended with `ECONNREFUSED` in the client. The first was because RoadRunner listened on IPv4 only while Node tries `localhost` as IPv6 first; the script now binds both. The second happened once just after a restart and did not repeat; its cause was not found. The server logged no errors either time.
 
 ## Not built yet
 

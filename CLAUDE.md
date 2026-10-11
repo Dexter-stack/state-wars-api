@@ -26,7 +26,7 @@ Read `ARCHITECTURE.md` first. The Node API in `../state-wars-api` is the specifi
 ## Before finishing any change
 `php vendor/bin/pest` (feature tests need the `statewars_test` database and Redis). For battle or leaderboard changes, also run the API locally and `node ../state-wars-api/test/load/smoke.mjs`.
 
-On Windows: use `127.0.0.1` in `DATABASE_URL`/`REDIS_URL`, and set `PHP_INI_SCAN_DIR=php-ini` before starting Octane (RoadRunner needs `ext-sockets`).
+On Windows: use `127.0.0.1` in `DATABASE_URL`/`REDIS_URL`, and start the API with `.\serve-windows.ps1` (`octane:start` needs POSIX signals; the script also sets `PHP_INI_SCAN_DIR=php-ini`, because RoadRunner needs `ext-sockets`).
 
 ## Open work
 OTP sign-in, share images, Web Push reminders, reports/moderation, final rank thresholds.

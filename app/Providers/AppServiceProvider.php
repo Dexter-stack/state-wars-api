@@ -12,6 +12,7 @@ use App\Core\Http\Middleware\JsonBody;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Events\ConnectionEstablished;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Redis;
@@ -46,6 +47,9 @@ class AppServiceProvider extends ServiceProvider
                 $e->connection->statement("SET statement_timeout = {$ms}");
             }
         });
+
+        // Responses are the bare contract objects, never {"data": …}
+        JsonResource::withoutWrapping();
 
         $this->rateLimits();
     }

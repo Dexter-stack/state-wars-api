@@ -7,6 +7,8 @@ return [
     App\Modules\Users\UsersServiceProvider::class,
     App\Modules\Battles\BattlesServiceProvider::class,
     App\Modules\Leaderboard\LeaderboardServiceProvider::class,
+    App\Modules\Today\TodayServiceProvider::class,
+    App\Modules\Derbies\DerbiesServiceProvider::class,
     App\Modules\Stats\StatsServiceProvider::class,
     App\Modules\Questions\QuestionsServiceProvider::class,
 ];

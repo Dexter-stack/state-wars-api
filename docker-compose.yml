@@ -1,0 +1,57 @@
+# Production-like stack: docker compose up --build   (needs APP_KEY in the environment or an .env file)
+# Local development on Windows does NOT use this file: see README "Run locally".
+x-env: &env
+  APP_ENV: local
+  NODE_ENV: development
+  APP_KEY: ${APP_KEY:?set APP_KEY (php artisan key:generate --show)}
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/statewars
+  REDIS_URL: redis://redis:6379
+  DEV_ALWAYS_OPEN: "true"
+  MIN_PLAYERS_RANKED: "1"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: statewars }
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres"], interval: 3s, retries: 20 }
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+
+  migrate:
+    build: .
+    command: ["sh", "-c", "php artisan migrate --force && php artisan db:seed --force"] # seed is for local only
+    environment: *env
+    depends_on: { postgres: { condition: service_healthy } }
+
+  api:
+    build: .
+    environment: *env
+    ports: ["8080:8080"]
+    stop_grace_period: 15s # RoadRunner drains in-flight requests on SIGTERM
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_started }
+
+  horizon:
+    build: .
+    command: ["php", "artisan", "horizon"]
+    environment: *env
+    stop_grace_period: 60s
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  scheduler:
+    build: .
+    # make sure today exists even if the scheduler was down at midnight, then run the schedule
+    command: ["sh", "-c", "php artisan statewars:prepare-day; php artisan schedule:work"]
+    environment: *env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+volumes:
+  pgdata:

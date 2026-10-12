@@ -27,8 +27,10 @@ final class TableService
         $kind = $subject === 'all' ? 'daily' : 'league';
         $subj = $subject === 'all' ? null : $subject;
 
+        $boosted = [];
         if ($period === 'tonight') {
             $b = $this->locator->todaysBattle($kind, $subj);
+            $boosted = $b ? $b->uprisingStates : [];
             $rows = $b ? $this->leaderboard->liveTable($b) : array_map(fn ($s) => [
                 'stateCode' => $s['code'], 'state' => $s['name'], 'players' => 0, 'average' => 0, 'move' => 0, 'ranked' => false, 'rank' => null,
             ], Catalog::STATES);
@@ -44,6 +46,8 @@ final class TableService
             'rows' => array_map(fn ($r) => [
                 'state' => $r['state'], 'stateCode' => $r['stateCode'], 'players' => $r['players'], 'move' => $r['move'],
                 'average' => $r['average'], 'ranked' => $r['ranked'], 'rank' => $r['rank'],
+                // scores double in tonight's battle (Uprising); always false on week and all-time tables
+                'boosted' => in_array($r['stateCode'], $boosted, true),
             ], $rows),
             'maxAge' => $maxAge,
         ];

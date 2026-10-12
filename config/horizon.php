@@ -210,6 +210,20 @@ return [
             'timeout' => 60,
             'nice' => 0,
         ],
+        // Sign-up, sign-in and reset codes (SendCodeEmailJob). Its own workers: a 10-minute sweep on "default"
+        // must never make a player wait for a code. The job sets its own tries and timeout.
+        'supervisor-mail' => [
+            'connection' => 'redis',
+            'queue' => ['mail'],
+            'balance' => 'simple',
+            'maxProcesses' => 2,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 128,
+            'tries' => 5,
+            'timeout' => 30,
+            'nice' => 0,
+        ],
     ],
 
     'environments' => [
@@ -219,11 +233,17 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
+            'supervisor-mail' => [
+                'maxProcesses' => 4,
+            ],
         ],
 
         'local' => [
             'supervisor-1' => [
                 'maxProcesses' => 3,
+            ],
+            'supervisor-mail' => [
+                'maxProcesses' => 1,
             ],
         ],
     ],

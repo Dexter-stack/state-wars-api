@@ -8,6 +8,7 @@ final readonly class Today
     /**
      * @param  array{rank: int, move: int, average: float|int, players: int}  $myState
      * @param  array{home: string, away: string, note: string}|null  $derby
+     * @param  array{entryId: string, finished: bool}|null  $myEntry  this player's entry for today's MAIN battle (not in the Node contract)
      */
     public function __construct(
         public ?string $battleId,
@@ -18,6 +19,7 @@ final readonly class Today
         public array $myState,
         public ?array $derby,
         public bool $isUprisingDay,
+        public ?array $myEntry,
     ) {}
 
     public function toArray(): array
@@ -30,6 +32,7 @@ final readonly class Today
                 'average' => $this->myState['average'], 'players' => $this->myState['players'],
             ],
             'derby' => $this->derby, 'isUprisingDay' => $this->isUprisingDay,
+            'myEntry' => $this->myEntry,
         ];
     }
 }

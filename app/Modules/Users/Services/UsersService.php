@@ -42,6 +42,14 @@ final class UsersService
 
     public function register(string $username, string $stateCode, bool $remind): UserRow
     {
+        $this->assertCanRegister($username, $stateCode);
+
+        return $this->users->create($username, $stateCode, $remind);
+    }
+
+    /** The checks register() makes, on their own: lets sign-up refuse a bad name before it spends the emailed code. */
+    public function assertCanRegister(string $username, string $stateCode): void
+    {
         $check = $this->checkUsername($username);
         if (! $check['available']) {
             throw Errors::conflict('username_unavailable', $check['reason']);
@@ -49,8 +57,6 @@ final class UsersService
         if (! Catalog::isStateCode($stateCode)) {
             throw Errors::badRequest('Pick one of the 36 states or the FCT.');
         }
-
-        return $this->users->create($username, $stateCode, $remind);
     }
 
     public function get(string $userId): UserRow

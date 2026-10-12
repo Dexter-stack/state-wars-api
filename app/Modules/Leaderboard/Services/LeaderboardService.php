@@ -111,9 +111,14 @@ final class LeaderboardService
     public function stateSnapshot(BattleView $b, string $stateCode, bool $mustInclude = false): array
     {
         $find = fn (array $rows) => array_values(array_filter($rows, fn ($r) => $r['stateCode'] === $stateCode))[0] ?? null;
-        $row = $find($this->liveTable($b));
-        if ($mustInclude && (! $row || $row['players'] === 0)) {
-            $row = $find($this->computeTable($b));
+        $final = $this->finalTable($b);
+        if ($final !== null) {
+            $row = $find($final);
+        } else {
+            $row = $find($this->liveTable($b));
+            if ($mustInclude && (! $row || $row['players'] === 0)) {
+                $row = $find($this->computeTable($b));
+            }
         }
 
         return [
@@ -122,12 +127,43 @@ final class LeaderboardService
         ];
     }
 
-    /** "Top X%": share of players who scored at least as well as $score. */
-    public function percentile(string $battleId, int $score): int
+    /**
+     * The table of a finalized battle, rebuilt from the rows stored at close. The live Redis totals expire after
+     * a week; these never do, so an old result keeps its state rank. Null while the battle is still running.
+     */
+    private function finalTable(BattleView $b): ?array
     {
+        if ($b->status !== 'finalized') {
+            return null;
+        }
+        $stored = $this->cache->getOrSet("final:{$b->id}", 600, fn () => $this->results->finalRows($b->id));
+        if (! is_array($stored) || $stored === []) {
+            return null;
+        }
+        $byState = array_column($stored, null, 'stateCode');
+        $rows = [];
+        foreach (Catalog::STATES as $s) {
+            $r = $byState[$s['code']] ?? null;
+            $rows[] = [
+                'stateCode' => $s['code'], 'state' => $s['name'], 'players' => $r['players'] ?? 0, 'average' => $r['average'] ?? 0,
+                'ranked' => ($r['rank'] ?? null) !== null, 'rank' => $r['rank'] ?? null, 'move' => $r['move'] ?? 0,
+            ];
+        }
+        usort($rows, fn ($a, $c) => ($c['ranked'] <=> $a['ranked']) ?: (($a['rank'] ?? 0) <=> ($c['rank'] ?? 0)));
+
+        return $rows;
+    }
+
+    /** "Top X%": share of players who scored at least as well as $score. */
+    public function percentile(BattleView $b, int $score): int
+    {
+        // a finalized battle is counted from the permanent entries, a running one from the live counters
+        $histogram = $b->status === 'finalized'
+            ? $this->cache->getOrSet("hist:{$b->id}", 600, fn () => $this->results->scoreCounts($b->id))
+            : $this->live->histogram($b->id);
         $total = 0;
         $atLeast = 0;
-        foreach ($this->live->histogram($battleId) as $s => $c) {
+        foreach ($histogram as $s => $c) {
             $total += $c;
             if ($s >= $score) {
                 $atLeast += $c;
@@ -143,8 +179,8 @@ final class LeaderboardService
     /** One pre-written line about a rival state, chosen from approved templates. Never built from player input. */
     public function banterFor(BattleView $b, string $myState): string
     {
-        $rows = $this->liveTable($b);
-        $templates = $this->cache->getOrSet('banter:approved', 600, fn () => $this->results->approvedBanter());
+        $rows = $this->finalTable($b) ?? $this->liveTable($b);
+        $templates =$this->cache->getOrSet('banter:approved', 600, fn () => $this->results->approvedBanter());
         $others = array_values(array_filter($rows, fn ($r) => $r['ranked'] && $r['stateCode'] !== $myState));
         if ($others === []) {
             return Catalog::stateName($myState).' is on the board. Bring your people, the table needs more players.';

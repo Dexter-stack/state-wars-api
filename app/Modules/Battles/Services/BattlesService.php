@@ -281,6 +281,18 @@ final class BattlesService
         return $this->result($userId, $b, $this->entries->findById($e->id), count($qs));
     }
 
+    /** The result of an entry that is already finished (by the player or by the close job). Read-only. */
+    public function finishedResult(string $userId, string $entryId): BattleResult
+    {
+        $e = $this->ownedEntry($userId, $entryId);
+        if ($e->finishedAt === null) {
+            throw Errors::conflict('not_finished', "This battle isn't finished yet.");
+        }
+        $b = $this->battleById($e->battleId);
+
+        return $this->result($userId, $b, $e, count($b->questionIds));
+    }
+
     /** Marks an entry finished and applies its side effects once. Shared by finish() and the close job. */
     private function settle(BattleView $b, EntryRow $e, int $total): void
     {
@@ -300,7 +312,7 @@ final class BattlesService
         }
         $snap = $this->leaderboard->stateSnapshot($b, $e->stateCode, true);
         $banter = $this->leaderboard->banterFor($b, $e->stateCode);
-        $pct = $this->leaderboard->percentile($b->id, $e->score);
+        $pct = $this->leaderboard->percentile($b, $e->score);
         $me = $this->users->summary($userId);
 
         return new BattleResult(

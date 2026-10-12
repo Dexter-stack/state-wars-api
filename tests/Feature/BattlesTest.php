@@ -134,6 +134,58 @@ it('close job settles abandoned entries, writes state_results once, and is idemp
     expect($svc->dueForClose())->toBe([]);
 });
 
+it('reads a finished result without changing it, for player-finished and auto-finished entries', function () {
+    $h = player();
+    $entry = $this->postJson('/v1/entries', [], $h)->json('battleId');
+    $this->getJson("/v1/entries/{$entry}/result", $h)->assertStatus(409)
+        ->assertExactJson(['error' => ['code' => 'not_finished', 'message' => "This battle isn't finished yet."]]);
+    expect(DB::table('entries')->where('id', $entry)->value('finished_at'))->toBeNull(); // reading never finishes it
+    $this->getJson('/v1/entries/not-a-uuid/result', $h)->assertStatus(400);
+
+    $abandoned = player('ada_1', 'LA');
+    $left = $this->postJson('/v1/entries', [], $abandoned)->json('battleId');
+    $this->postJson("/v1/entries/{$left}/answers", ['index' => 0, 'choice' => right($left, 0)], $abandoned)->assertOk();
+
+    Carbon::setTestNow(Carbon::createFromTimestampMs($this->times['closesAt'] + 3600_000));
+    $finished = $this->postJson("/v1/entries/{$entry}/finish", [], $h)->assertOk()->json();
+    $this->getJson("/v1/entries/{$entry}/result", $h)->assertOk()->assertExactJson($finished);
+    expect($finished['stateRank'])->toBe(1);
+
+    expect(app(BattlesService::class)->closeBattle($this->battleId))->toBe(['settled' => 1]); // the server finishes ada's
+
+    // the player's own numbers are fixed; the state's position is the table as it stands now (Lagos went ahead)
+    $later = $this->getJson("/v1/entries/{$entry}/result", $h)->assertOk()->json();
+    $own = ['day', 'score', 'total', 'answers', 'points', 'stateCode'];
+    expect(array_intersect_key($later, array_flip($own)))->toBe(array_intersect_key($finished, array_flip($own)))
+        ->and($later['stateRank'])->toBe(2);
+    $auto =$this->getJson("/v1/entries/{$left}/result", $abandoned)->assertOk()->json();
+    expect(array_keys($auto))->toBe(array_keys($finished))
+        ->and($auto['score'])->toBe(1)->and($auto['answers'])->toBe([true, false, false, false, false, false, false, false, false, false]);
+    $this->postJson("/v1/entries/{$left}/finish", [], $abandoned)->assertOk()->assertExactJson($auto); // finish stays a safe read too
+    $this->getJson("/v1/entries/{$left}/result", $h)->assertStatus(404); // someone else's entry
+});
+
+it('keeps a result complete after the live table has expired', function () {
+    $h = player();
+    $entry = $this->postJson('/v1/entries', [], $h)->json('battleId');
+    $rival = player('ada_1', 'LA');
+    $theirs = $this->postJson('/v1/entries', [], $rival)->json('battleId');
+    $this->postJson("/v1/entries/{$theirs}/answers", ['index' => 0, 'choice' => right($theirs, 0)], $rival)->assertOk();
+    Carbon::setTestNow(Carbon::createFromTimestampMs($this->times['closesAt'] + 3600_000));
+    app(BattlesService::class)->closeBattle($this->battleId);
+    $fresh = $this->getJson("/v1/entries/{$entry}/result", $h)->assertOk()->json();
+    expect($fresh['stateRank'])->toBe(2)->and($fresh['percentile'])->toBe(100)->and($fresh['banter'])->toContain('Lagos');
+
+    // a week later Redis has dropped lb:{battle}:* (and every cache): the result comes from state_results and entries
+    Redis::connection()->flushdb();
+    app(App\Core\Cache\Cache::class)->flushLocal();
+    expect(Redis::connection()->exists("lb:{$this->battleId}:cnt"))->toBe(0);
+    Carbon::setTestNow(Carbon::now()->addDays(30));
+    $this->getJson("/v1/entries/{$entry}/result", $h)->assertOk()->assertExactJson(['streak' => 0] + $fresh);
+    $top = $this->getJson("/v1/entries/{$theirs}/result", $rival)->assertOk()->json();
+    expect($top['stateRank'])->toBe(1)->and($top['percentile'])->toBe(50)->and($top['score'])->toBe(1);
+});
+
 it('tops up time on resume from the pause budget', function () {
     $h = player();
     $entry = $this->postJson('/v1/entries', [], $h)->json('battleId');

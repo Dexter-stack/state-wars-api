@@ -61,6 +61,12 @@ final class EntriesController
         return new BattleResultResource($this->battles->finish(AuthUser::of($request)->id, $request->entryId()));
     }
 
+    /** GET /v1/entries/{id}/result → the BattleResult of a finished entry, without changing anything */
+    public function result(EntryIdRequest $request): BattleResultResource
+    {
+        return new BattleResultResource($this->battles->finishedResult(AuthUser::of($request)->id, $request->entryId()));
+    }
+
     /** GET /v1/entries/{id}/reveal/{n} → 425 too_early until everyone has finished */
     public function reveal(RevealRequest $request): RevealResource
     {

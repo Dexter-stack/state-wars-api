@@ -7,6 +7,16 @@ interface ResultsRepository
     /** @param list<array{stateCode: string, players: int, average: float|int, rank: ?int, move: int, banter: ?string}> $rows */
     public function upsert(string $battleId, array $rows): void;
 
+    /**
+     * The final table stored for a battle: only states that had players. Empty until the battle is finalized.
+     *
+     * @return list<array{stateCode: string, players: int, average: float|int, rank: ?int, move: int}>
+     */
+    public function finalRows(string $battleId): array;
+
+    /** How many finished players got each score in a battle, from the permanent entries. @return array<int, int> score → players */
+    public function scoreCounts(string $battleId): array;
+
     /** Final ranks of the most recent finalized battle of this kind before $beforeDate. @return array<string, int> */
     public function previousRanks(string $kind, ?string $subject, string $beforeDate): array;
 

@@ -21,7 +21,7 @@ function tok(string $name = 'tobi_codes', string $state = 'KW'): array
 it('serves tonight\'s table to anyone with Cache-Control, all 37 states', function () {
     $r = $this->getJson('/v1/table')->assertOk()->assertHeader('Cache-Control', 'max-age=5, public');
     expect($r->json())->toHaveCount(37)
-        ->and($r->json('0'))->toBe(['state' => 'Abia', 'stateCode' => 'AB', 'players' => 0, 'move' => 0, 'average' => 0, 'ranked' => false, 'rank' => null]);
+        ->and($r->json('0'))->toBe(['state' => 'Abia', 'stateCode' => 'AB', 'players' => 0, 'move' => 0, 'average' => 0, 'ranked' => false, 'rank' => null, 'boosted' => false]);
 });
 
 it('counts a finished player in tonight\'s table, with moves against last night', function () {
@@ -50,17 +50,47 @@ it('serves week and all-time tables from finalized results', function () {
 it('builds the Today screen', function () {
     $h = tok();
     $t = $this->getJson('/v1/today', $h)->assertOk()->json();
-    expect(array_keys($t))->toBe(['battleId', 'day', 'status', 'startsAt', 'endsAt', 'myState', 'derby', 'isUprisingDay']);
+    expect(array_keys($t))->toBe(['battleId', 'day', 'status', 'startsAt', 'endsAt', 'myState', 'derby', 'isUprisingDay', 'myEntry']);
     expect($t['status'])->toBe('upcoming')->and($t['day'])->toBe(23)->and($t['isUprisingDay'])->toBeTrue()
         ->and($t['startsAt'])->toBe($this->times['opensAt'])->and($t['endsAt'])->toBe($this->times['closesAt'])
         ->and($t['myState'])->toBe(['rank' => 0, 'move' => 0, 'average' => 0, 'players' => 0])
-        ->and($t['derby'])->toBe(['home' => 'Oyo', 'away' => 'Osun', 'note' => 'First derby between these two.']);
+        ->and($t['derby'])->toBe(['home' => 'Oyo', 'away' => 'Osun', 'note' => 'First derby between these two.'])
+        ->and($t['myEntry'])->toBeNull();
 
     Carbon::setTestNow(Carbon::createFromTimestampMs($this->times['opensAt'] + 1));
     expect($this->getJson('/v1/today', $h)->json('status'))->toBe('live');
     Carbon::setTestNow(Carbon::createFromTimestampMs($this->times['closesAt']));
     $closed = $this->getJson('/v1/today', $h)->json();
-    expect($closed['status'])->toBe('closed')->and($closed['startsAt'])->toBe(WatTime::battleTimes('2026-10-24', 20, 15)['opensAt']);
+    expect($closed['status'])->toBe('closed')->and($closed['startsAt'])->toBe(WatTime::battleTimes('2026-10-24', 20, 15)['opensAt'])
+        ->and($closed['day'])->toBe(23)->and($closed['battleId'])->toBe($t['battleId']); // still the battle that just closed
+});
+
+it('tells the player about their own entry for today\'s main battle, also after it closes', function () {
+    $h = tok();
+    $other = tok('ada_1', 'LA');
+    Carbon::setTestNow(Carbon::createFromTimestampMs($this->times['opensAt'] + 1000));
+    $e = $this->postJson('/v1/entries', [], $h)->json('battleId');
+    expect($this->getJson('/v1/today', $h)->json('myEntry'))->toBe(['entryId' => $e, 'finished' => false]);
+    expect($this->getJson('/v1/today', $other)->json('myEntry'))->toBeNull(); // per player
+
+    Carbon::setTestNow(Carbon::createFromTimestampMs($this->times['closesAt'] + 3600_000));
+    $closed = $this->getJson('/v1/today', $h)->json();
+    expect($closed['status'])->toBe('closed')->and($closed['myEntry'])->toBe(['entryId' => $e, 'finished' => false]);
+    $this->postJson("/v1/entries/{$e}/finish", [], $h)->assertOk();
+    expect($this->getJson('/v1/today', $h)->json('myEntry'))->toBe(['entryId' => $e, 'finished' => true]);
+
+    Carbon::setTestNow(Carbon::parse('2026-10-24T00:00:01+01:00')); // the day rolled over
+    $next = $this->getJson('/v1/today', $h)->json();
+    expect($next['myEntry'])->toBeNull()->and($next['day'])->toBe(24);
+});
+
+it('marks the states that score double tonight, and only on tonight\'s table', function () {
+    DB::update("UPDATE battles SET uprising_states = ARRAY['KW','LA'] WHERE battle_date = '2026-10-23' AND kind = 'daily'");
+    $boosted = fn (string $url) => collect($this->getJson($url)->assertOk()->json())->where('boosted', true)->pluck('stateCode')->sort()->values()->all();
+    expect($boosted('/v1/table'))->toBe(['KW', 'LA'])
+        ->and($boosted('/v1/table?period=week'))->toBe([])
+        ->and($boosted('/v1/table?period=all'))->toBe([])
+        ->and($boosted('/v1/table?subject=maths'))->toBe([]); // no league battle tonight
 });
 
 it('lists the six subject leagues', function () {

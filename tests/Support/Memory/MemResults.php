@@ -14,6 +14,16 @@ final class MemResults implements ResultsRepository
         $this->saved[$battleId] = $rows;
     }
 
+    public function finalRows(string $battleId): array
+    {
+        return $this->saved[$battleId] ?? [];
+    }
+
+    public function scoreCounts(string $battleId): array
+    {
+        return [];
+    }
+
     public function previousRanks(string $kind, ?string $subject, string $beforeDate): array
     {
         return [];

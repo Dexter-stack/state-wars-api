@@ -5,7 +5,7 @@ namespace App\Modules\Leaderboard\Http\Resources;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-/** contracts.ts TableRow plus stateCode, ranked, rank (unranked states under MIN_PLAYERS_RANKED have rank null). */
+/** contracts.ts TableRow plus stateCode, ranked, rank (unranked states under MIN_PLAYERS_RANKED have rank null) and boosted. */
 final class TableRowResource extends JsonResource
 {
     public function toArray(Request $request): array
@@ -14,7 +14,7 @@ final class TableRowResource extends JsonResource
 
         return [
             'state' => $r['state'], 'stateCode' => $r['stateCode'], 'players' => $r['players'], 'move' => $r['move'],
-            'average' => $r['average'], 'ranked' => $r['ranked'], 'rank' => $r['rank'],
+            'average' => $r['average'], 'ranked' => $r['ranked'], 'rank' => $r['rank'], 'boosted' => $r['boosted'],
         ];
     }
 }

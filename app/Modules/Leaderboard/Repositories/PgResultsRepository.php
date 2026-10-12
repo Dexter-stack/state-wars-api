@@ -22,6 +22,30 @@ final class PgResultsRepository implements ResultsRepository
         );
     }
 
+    public function finalRows(string $battleId): array
+    {
+        $rows = DB::select('SELECT state_code, players, average::float AS average, rank, move FROM state_results WHERE battle_id = ?', [$battleId]);
+
+        return array_map(fn ($r) => [
+            'stateCode' => $r->state_code, 'players' => (int) $r->players, 'average' => (float) $r->average,
+            'rank' => $r->rank === null ? null : (int) $r->rank, 'move' => (int) $r->move,
+        ], $rows);
+    }
+
+    public function scoreCounts(string $battleId): array
+    {
+        $rows = DB::select(
+            'SELECT score, count(*)::int AS players FROM entries WHERE battle_id = ? AND finished_at IS NOT NULL GROUP BY score',
+            [$battleId],
+        );
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(int) $r->score] = (int) $r->players;
+        }
+
+        return $out;
+    }
+
     public function previousRanks(string $kind, ?string $subject, string $beforeDate): array
     {
         $rows = DB::select(

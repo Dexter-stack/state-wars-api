@@ -13,6 +13,7 @@ Read `ARCHITECTURE.md` first. The Node API in `../state-wars-api` is the specifi
 - New tables or columns: add a new migration file. Never edit `2026_01_01_000001_init_schema.php` after it has run in production.
 
 ## Game rules that must not break
+- Sign-in, password and account endpoints (`AccountService`) are the one part with no Node counterpart: `docs/FRONTEND_API.md` is their specification. Every account has a verified email and a password: an email is saved only after its code is confirmed, guest sign-up stays closed outside tests (`GUEST_SIGNUP`), and no public endpoint reveals whether an email has an account.
 - The correct answer never leaves the server before the player has answered that question.
 - Time is measured on the server from `current_sent_at`.
 - Answer and finish stay idempotent: unique keys plus conditional updates in one transaction. Leaderboard, streak and badges update exactly once per entry.
@@ -24,9 +25,9 @@ Read `ARCHITECTURE.md` first. The Node API in `../state-wars-api` is the specifi
 - `DEV_ALWAYS_OPEN` must never be true in production (the env validator refuses at boot).
 
 ## Before finishing any change
-`php vendor/bin/pest` (feature tests need the `statewars_test` database and Redis). For battle or leaderboard changes, also run the API locally and `node ../state-wars-api/test/load/smoke.mjs`.
+`php vendor/bin/pest` (feature tests need the `statewars_test` database and Redis). For battle or leaderboard changes, also run the API locally with `GUEST_SIGNUP=true` (the script signs up guests) and `node ../state-wars-api/test/load/smoke.mjs`.
 
 On Windows: use `127.0.0.1` in `DATABASE_URL`/`REDIS_URL`, and start the API with `.\serve-windows.ps1` (`octane:start` needs POSIX signals; the script also sets `PHP_INI_SCAN_DIR=php-ini`, because RoadRunner needs `ext-sockets`).
 
 ## Open work
-OTP sign-in, share images, Web Push reminders, reports/moderation, final rank thresholds.
+Phone OTP sign-in, changing an account's email, share images, Web Push reminders, reports/moderation, final rank thresholds.

@@ -9,6 +9,7 @@ Route::middleware(['throttle:global', 'auth.player'])->group(function () {
     Route::get('/v1/entries/latest', [EntriesController::class, 'latest']);
     Route::get('/v1/entries/{id}/current', [EntriesController::class, 'current']);
     Route::post('/v1/entries/{id}/finish', [EntriesController::class, 'finish']);
+    Route::get('/v1/entries/{id}/result', [EntriesController::class, 'result']);
     Route::get('/v1/entries/{id}/reveal/{n}', [EntriesController::class, 'reveal']);
 });
 

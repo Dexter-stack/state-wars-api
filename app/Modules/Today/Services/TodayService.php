@@ -8,6 +8,7 @@ use App\Core\Config\GameConfig;
 use App\Core\JsMath;
 use App\Core\WatTime;
 use App\Modules\Battles\Repositories\Contracts\BattlesRepository;
+use App\Modules\Battles\Repositories\Contracts\EntriesRepository;
 use App\Modules\Battles\Support\BattleView;
 use App\Modules\Catalog\Catalog;
 use App\Modules\Derbies\Repositories\Contracts\DerbiesRepository;
@@ -21,6 +22,7 @@ final class TodayService implements BattleLocator
 {
     public function __construct(
         private readonly BattlesRepository $battles,
+        private readonly EntriesRepository $entries,
         private readonly LeaderboardService $leaderboard,
         private readonly ResultsRepository $results,
         private readonly DerbiesRepository $derbies,
@@ -56,6 +58,8 @@ final class TodayService implements BattleLocator
         $snap = $b && $now >= $b->opensAt
             ? $this->leaderboard->stateSnapshot($b, $user->stateCode)
             : ['rank' => 0, 'move' => 0, 'average' => 0, 'players' => 0];
+        // $b is the main battle of today's WAT date, so this still describes it after it closes, until midnight
+        $entry = $b ? $this->entries->findForUser($b->id, $userId) : null;
 
         return new Today(
             battleId: $b?->id,
@@ -66,6 +70,7 @@ final class TodayService implements BattleLocator
             myState: $snap,
             derby: $this->derby($date),
             isUprisingDay: WatTime::watWeekday($now) === 5,
+            myEntry: $entry ? ['entryId' => $entry->id, 'finished' => $entry->finishedAt !== null] : null,
         );
     }
 

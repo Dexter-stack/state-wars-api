@@ -21,6 +21,9 @@ return [
     // development only: battles playable at any time, answers revealed straight away
     'dev_always_open' => env('DEV_ALWAYS_OPEN', false),
 
+    // accounts are created with an email and password (POST /v1/auth/signup). true re-opens POST /v1/auth/guest,
+    // which makes accounts with neither: only for the test suite and the Node smoke/burst scripts
+    'guest_signup' => (bool) env('GUEST_SIGNUP', false),
     'cors_origins' => env('CORS_ORIGINS', 'http://localhost:5173'),
     'public_web_url' => env('PUBLIC_WEB_URL', 'http://localhost:5173'),
 
@@ -28,6 +31,7 @@ return [
     'rate_global_per_min' => env('RATE_GLOBAL_PER_MIN', 240),
     'rate_auth_per_hour' => env('RATE_AUTH_PER_HOUR', 20),
     'rate_answers_per_min' => 40, // fixed, as in the Node API
+    'rate_signin_per_min' => 10, // sign-in, forgot and reset together, per IP
 
     // HTTP
     'body_limit_bytes' => 16 * 1024, // the biggest legit body is an admin question; nothing needs more

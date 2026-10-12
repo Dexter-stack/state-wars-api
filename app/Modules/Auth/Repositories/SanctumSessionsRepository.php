@@ -45,6 +45,24 @@ final class SanctumSessionsRepository implements SessionsRepository
         }
     }
 
+    public function fingerprint(string $token): string
+    {
+        $parsed = self::parse($token);
+
+        return $parsed === null ? hash('sha256', $token) : $parsed[0].':'.hash('sha256', $parsed[1]);
+    }
+
+    public function deleteAllForUser(string $userId, ?string $exceptToken = null): array
+    {
+        $keep = $exceptToken === null ? null : self::parse($exceptToken);
+        $rows = DB::select(
+            'DELETE FROM personal_access_tokens WHERE tokenable_id = ? AND id <> ? RETURNING id, token',
+            [$userId, $keep[0] ?? 0],
+        );
+
+        return array_map(fn ($r) => $r->id.':'.$r->token, $rows);
+    }
+
     /** @return array{0: int, 1: string}|null */
     private static function parse(string $token): ?array
     {

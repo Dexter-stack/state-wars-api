@@ -33,7 +33,7 @@ HTTP request (Octane worker)
 
 | Module | Responsibility | Key endpoints |
 |---|---|---|
-| `Auth` | Guest sign-up, Sanctum bearer tokens (SHA-256 stored), `auth.player` / `auth.admin` | `POST /v1/auth/guest`, `POST /v1/auth/logout` |
+| `Auth` | Guest sign-up, Sanctum bearer tokens (SHA-256 stored), `auth.player` / `auth.admin`; securing an account with email and password, sign-in, password reset (`AccountService`) | `POST /v1/auth/guest`, `/v1/auth/login`, `/v1/auth/password/*`, `/v1/auth/account*` |
 | `Users` | Profile, username rules, state changes (once per 30 days, first correction free), streaks, ranks | `POST /v1/usernames/check`, `GET/PATCH /v1/me` |
 | `Today` | Home screen, subject leagues, `BattleLocator` | `GET /v1/today`, `GET /v1/subjects` |
 | `Battles` | Engine: start, answer, resume, finish, reveal; scheduler; close job | `/v1/entries…` |
@@ -62,10 +62,26 @@ HTTP request (Octane worker)
 - **Two-person approval.** The service rule, with a DB `CHECK` as a backstop.
 - **`DEV_ALWAYS_OPEN`** is refused at boot in production, in every process.
 
+## Accounts: sign-in and recovery
+
+Not in the Node API, where every account is a guest reachable only through its token. Here every account is created with an email and a password (`AccountService::signUp`), so it survives a lost device.
+
+- **Sign-up is two calls.** `POST /v1/auth/signup/email` emails a code; `POST /v1/auth/signup` creates the user and attaches the credentials. The username and state are checked before the code is spent. Step 1 answers the same for a registered address; only someone holding the code is told `email_taken`.
+- **Guest sign-up is closed.** `POST /v1/auth/guest` answers 410 unless `GUEST_SIGNUP=true`, which exists for the test suite and the Node smoke and burst scripts. Guests made that way can attach credentials later (`/v1/auth/account/email`, `/confirm`).
+
+- **Storage.** `users.email` and `users.password_hash` (migration `2026_10_11_000001`), both NULL for guests, with a `CHECK` that they are set together and a unique index on `lower(email)`. An email is written only after its code was confirmed.
+- **Codes.** 6 digits, 10 minutes, single use, destroyed after 5 wrong tries. Redis holds only `sha256(code|email)` (`RedisCodeStore`), so a code sent to one address cannot confirm another. One email per minute per player or address.
+- **No enumeration.** Sign-in gives one error for every failure and does the same hashing work for unknown names; forgot-password always answers 204.
+- **Guessing.** 10 sign-in tries per name per 15 minutes, plus a per-IP limit (`throttle:signin`, 10 per minute) kept apart from the sign-up limit.
+- **Sessions.** The session cache is keyed by `SessionsRepository::fingerprint` (`{token id}:{stored hash}`), which can be computed from a token row as well as from a token. A password reset deletes every token of the user and their cache entries; a password change keeps only the current one. A worker's in-process copy can outlive that by up to 2 seconds, as with logout.
+- **Interfaces.** `CredentialsRepository`, `CodeStore`, `CodeMailer` and `PasswordHasher`; the service names none of Laravel's mail, hash, DB or Redis classes.
+- **Email is queued.** `CodeMailer` is bound to `QueuedCodeMailer`, which dispatches `SendCodeEmailJob`; a worker sends it with `LaravelCodeMailer` through `MAIL_MAILER`. The request returns without waiting for the mail provider, and takes the same time whether or not an address has an account. The job is encrypted (the code is in its payload, so Redis and `failed_jobs` never hold it in plain text), runs on its own `mail` queue with its own Horizon supervisor so a long sweep cannot delay it, retries up to four times (after 3, 5, 10 and 20 seconds, with a 10-second mail timeout per try), and is dropped rather than sent once the code has expired. If no worker is running, no code is sent.
+
 ## Built for the 8pm rush
 
 | Pressure | How it's handled |
 |---|---|
+| Old results | The live Redis totals expire after 7 days. Once a battle is finalized, a result's state rank, movement and banter come from `state_results` and its percentile from a count over `entries` (both cached 10 min), so they never expire. |
 | Thousands finishing at once | Live state totals are Redis hash increments in one MULTI (`lb:{battle}:sum/cnt/hist`): O(1), no row locks. Postgres gets one row per state at close. |
 | Everyone polling the table | `GET /v1/table` is identical for everyone. It uses a two-level cache: 2s in the Octane worker's memory, then 5s in Redis. A Redis lock gives single-flight across all workers and servers, and `Cache-Control: public, max-age=5` lets a CDN serve it. |
 | Auth on every request | Token → user is cached 2s in-process and 10 min in Redis. It's one indexed join on a miss, and Sanctum's per-request `last_used_at` write is avoided. |
@@ -106,12 +122,12 @@ Nothing is escaped by hand, which matters for `options`, whose text can contain 
 | PHP | 8.2 (XAMPP) | 8.3+ |
 | Server | RoadRunner (`rr.exe`) with Octane's worker, started by `serve-windows.ps1` (`octane:start` needs POSIX signals) | `octane:start --server=roadrunner` (Dockerfile) |
 | Redis client | predis | phpredis (chosen automatically when the extension is loaded) |
-| Queue | `queue:work` | Horizon (needs `pcntl`) |
+| Queue | `queue:work redis --queue=mail,default` | Horizon (needs `pcntl`), supervisors for `default` and `mail` |
 | `ext-sockets` for RoadRunner | loaded only for this project via `PHP_INI_SCAN_DIR=php-ini` | in the image |
 
 ## Tested here
 
-- **99 Pest tests**, broken down as:
+- **119 Pest tests** (16 of them for accounts: sign-up, sign-in, lockout, reset, change, the closed guest route), broken down as:
   - The 20 Node unit tests, ported case for case, on in-memory fakes.
   - 1,000 golden shuffle vectors from the Node source.
   - Architecture rules.
@@ -137,7 +153,7 @@ Notes on the burst:
 ## Not built yet
 
 Same list as the Node API:
-1. Phone OTP sign-in and account recovery.
+1. Phone OTP sign-in; changing the email of a secured account.
 2. Share images.
 3. Web Push reminders.
 4. Reports and moderation.

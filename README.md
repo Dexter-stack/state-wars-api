@@ -23,7 +23,8 @@ php vendor/bin/rr get-binary -f 2025.1.15        # once: downloads rr.exe (about
 .\serve-windows.ps1              # API on port 8080 with 8 workers (-Port, -Workers to change)
 
 # in two other terminals
-php artisan queue:work redis      # jobs (Horizon in production; it needs pcntl, which Windows PHP lacks)
+php artisan queue:work redis --queue=mail,default   # jobs, including the sign-up and reset code emails: without this
+                                                    # worker no code is ever sent (Horizon in production; it needs pcntl)
 php artisan schedule:work         # prepare-day at 00:05 WAT, sweep every minute
 ```
 
@@ -36,7 +37,9 @@ php artisan schedule:work         # prepare-day at 00:05 WAT, sweep every minute
 | Command | Does |
 |---|---|
 | `.\serve-windows.ps1` (Windows) · `php artisan octane:start --server=roadrunner …` (Linux) | API |
-| `php artisan horizon` | Queue workers (Linux) |
+| `php artisan horizon` | Queue workers (Linux): `default` for battle jobs, `mail` for code emails |
+| `php artisan queue:work redis --queue=mail,default` | The same on Windows |
+| `php artisan queue:failed` | Code emails that failed all 5 tries (payloads are encrypted) |
 | `php artisan schedule:work` | Scheduler: `prepare-day` 00:05 WAT, `sweep` every minute |
 | `php artisan migrate` | Apply database migrations |
 | `php artisan db:seed` | Local sample data (refuses in production) |
@@ -44,7 +47,7 @@ php artisan schedule:work         # prepare-day at 00:05 WAT, sweep every minute
 | `php artisan statewars:sweep` | Close battles whose last player has finished |
 | `php artisan statewars:verify-battle [id]` | No duplicate answers; Redis totals equal Postgres totals |
 | `php vendor/bin/pest` | Unit tests (no database) and feature tests (PostgreSQL `statewars_test`, Redis db 15) |
-| `node ../state-wars-api/test/load/smoke.mjs` | Hits every endpoint on a running local API |
+| `node ../state-wars-api/test/load/smoke.mjs` | Hits every endpoint on a running local API. Start the API with `$env:GUEST_SIGNUP='true'` first: the script signs players up as guests |
 | `node ../state-wars-api/test/load/burst.mjs 500` | 500 players at once (raise `RATE_*` limits first) |
 | `k6 run ../state-wars-api/loadtest/battle.k6.js` | Realistic 8pm load test against staging |
 
@@ -55,8 +58,17 @@ Feature tests need a `statewars_test` database on the same server as `DATABASE_U
 Identical to the Node API. All endpoints are under `/v1`, JSON in and out. Send `Authorization: Bearer <token>` (from sign-up) except where marked public. Errors look like `{ "error": { "code": "already_played", "message": "…" } }`.
 
 ```
-POST  /v1/auth/guest                 public  { username, stateCode, remind } → 201 { token, player }
+POST  /v1/auth/signup/email          public  { email } → 204, emails a 6-digit code
+POST  /v1/auth/signup                public  { username, stateCode, remind, email, code, password } → 201 { token, player }
+POST  /v1/auth/guest                 public  410 gone unless GUEST_SIGNUP=true (Node test scripts only)
 POST  /v1/auth/logout                        204
+POST  /v1/auth/login                 public  { identifier (username or email), password } → { token, player }
+POST  /v1/auth/password/forgot       public  { email } → 204 (always), emails a 6-digit code
+POST  /v1/auth/password/reset        public  { email, code, password } → { token, player }; ends every other session
+GET   /v1/auth/account                       { secured, email? }
+POST  /v1/auth/account/email                 { email } → 204, emails a code
+POST  /v1/auth/account/confirm               { email, code, password } → { secured, email }
+POST  /v1/auth/password/change               { currentPassword, newPassword } → 204
 POST  /v1/usernames/check            public  { username } → { available, reason? }
 GET   /v1/me                                 PlayerSummary
 PATCH /v1/me                                 { stateCode?, remind? }
@@ -67,6 +79,7 @@ GET   /v1/entries/latest                     latest finished entry
 GET   /v1/entries/:id/current                resume after reconnecting
 POST  /v1/entries/:id/answers                { index, choice } → { correct, correctIndex, points, next }
 POST  /v1/entries/:id/finish                 BattleResult
+GET   /v1/entries/:id/result                 BattleResult of a finished entry (read-only)
 GET   /v1/entries/:id/reveal/:n              "How Nigeria answered" (425 too_early until everyone finishes)
 GET   /v1/table?period=tonight|week|all&subject=all|english|…   public, cacheable
 GET   /v1/derbies
@@ -77,11 +90,18 @@ Admin: GET/POST /v1/admin/questions · POST /v1/admin/questions/:id/approve
        POST /v1/admin/battles · POST /v1/admin/days/:date/prepare
 ```
 
-One visible difference: guest tokens are Sanctum tokens (`123|…`). Clients treat tokens as opaque, so nothing changes for them.
+Two differences from the Node API:
+- Guest tokens are Sanctum tokens (`123|…`). Clients treat tokens as opaque, so nothing changes for them.
+- `Today.myEntry` (the player's entry for today's main battle), `TableRow.boosted` (scores double tonight) and `GET /v1/entries/:id/result` exist only here. They are additions; nothing was renamed or removed.
+- Accounts are not guest accounts. Sign-up takes two calls and needs an email, proved with an emailed code, and a password; players then sign in on any device and can reset a forgotten password. The Node API's one-call guest sign-up (`POST /v1/auth/guest`) is closed here (410) unless `GUEST_SIGNUP=true`.
+- A finished result reads its state rank, movement, banter and percentile from the permanent records once its battle is finalized, so old results stay complete after the live Redis table expires.
+
+Locally, emails are not sent: `MAIL_MAILER=log` writes each one to `storage/logs/mail.log`, where the codes can be read.
 
 ## Production checklist
 
-- `APP_ENV=production`, `DEV_ALWAYS_OPEN=false`, real `APP_KEY`, `CORS_ORIGINS`, managed Postgres and Redis with backups.
+- `APP_ENV=production`, `DEV_ALWAYS_OPEN=false`, `GUEST_SIGNUP` unset or `false`, real `APP_KEY`, `CORS_ORIGINS`, managed Postgres and Redis with backups.
+- A real mail provider: `MAIL_MAILER=smtp` with `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD` and `MAIL_FROM_ADDRESS`. With the default `log` mailer no player ever receives a code, and codes sit in a log file.
 - `php artisan migrate --force` before deploying a new API version; `config:cache` and `route:cache` on boot (the Dockerfile does both).
 - At least 2 API instances behind a load balancer using `/ready`; Horizon on one or more hosts; one `schedule:work` (or more: jobs are `onOneServer`).
 - Octane workers per instance ≤ `PG_POOL_MAX` (PHP has no pool: one connection per worker). Put PgBouncer in front of Postgres when running many instances.

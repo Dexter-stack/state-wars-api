@@ -65,6 +65,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Where MAIL_MAILER=log writes emails (development): sign-in codes are read from this file.
+        // Its own file and level, because LOG_LEVEL=info and RoadRunner's log level would hide them.
+        'mail' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/mail.log'),
+            'level' => 'debug',
+        ],
+
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),

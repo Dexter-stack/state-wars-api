@@ -39,4 +39,19 @@ final class Errors
     {
         return new AppException(410, 'gone', $message);
     }
+
+    public static function invalidCredentials(): AppException
+    {
+        return new AppException(401, 'invalid_credentials', 'Wrong username, email or password.');
+    }
+
+    public static function invalidCode(): AppException
+    {
+        return new AppException(400, 'invalid_code', 'That code is wrong or has expired. Ask for a new one.');
+    }
+
+    public static function tooMany(string $message): AppException
+    {
+        return new AppException(429, 'rate_limited', $message);
+    }
 }

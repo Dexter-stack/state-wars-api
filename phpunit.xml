@@ -31,5 +31,10 @@
         <env name="MIN_PLAYERS_RANKED" value="1" force="true"/>
         <env name="RATE_GLOBAL_PER_MIN" value="100000" force="true"/>
         <env name="RATE_AUTH_PER_HOUR" value="100000" force="true"/>
+        <env name="BCRYPT_ROUNDS" value="4" force="true"/>
+        <!-- never the real mail provider from .env: tests must not be able to send an email -->
+        <env name="MAIL_MAILER" value="array" force="true"/>
+        <!-- most tests create players through the one-call guest sign-up; AccountTest covers the real sign-up and the closed door -->
+        <env name="GUEST_SIGNUP" value="true" force="true"/>
     </php>
 </phpunit>

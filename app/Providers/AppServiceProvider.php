@@ -68,6 +68,8 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('global', fn (Request $r) => Limit::perMinute((int) config('statewars.rate_global_per_min'))->by($key($r)));
         RateLimiter::for('auth', fn (Request $r) => Limit::perHour((int) config('statewars.rate_auth_per_hour'))->by($key($r)));
+        // sign-in, forgot and reset: always per IP, in their own bucket so they never use up the sign-up allowance
+        RateLimiter::for('signin', fn (Request $r) => Limit::perMinute((int) config('statewars.rate_signin_per_min'))->by('ip:'.$r->ip()));
         RateLimiter::for('answers', fn (Request $r) => Limit::perMinute((int) config('statewars.rate_answers_per_min'))->by($key($r)));
     }
 

@@ -5,6 +5,16 @@ it('reports health and readiness', function () {
     $this->get('/ready')->assertOk()->assertExactJson(['ok' => true]);
 });
 
+it('shows a welcome page at the base URL, and JSON to a client that asks for it', function () {
+    $page = $this->get('/')->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
+    expect($page->headers->get('Content-Type'))->toStartWith('text/html');
+    $page->assertSee('State Wars')->assertSee('/health')->assertSee('localhost:5173')
+        ->assertDontSee('APP_')->assertDontSee('Laravel')->assertDontSee('PHP'); // nothing about the configuration or the stack
+
+    $this->getJson('/')->assertOk()->assertExactJson(['name' => 'State Wars API', 'ok' => true, 'api' => '/v1', 'health' => '/health']);
+    $this->postJson('/')->assertStatus(404); // still only a page: nothing can be posted to it
+});
+
 it('answers unknown routes with the Node error shape', function () {
     $this->getJson('/v1/nope')->assertStatus(404)
         ->assertExactJson(['error' => ['code' => 'not_found', 'message' => 'Route not found.']]);

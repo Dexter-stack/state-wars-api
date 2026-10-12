@@ -25,6 +25,8 @@ return Application::configure(basePath: dirname(__DIR__))
             // liveness and readiness: no auth, no rate limit
             Route::get('/health', [HealthController::class, 'health']);
             Route::get('/ready', [HealthController::class, 'ready']);
+            // the welcome page at the base URL
+            Route::group([], __DIR__.'/../routes/web.php');
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {

@@ -18,7 +18,8 @@ return [
             })(env('DATABASE_URL', env('DB_URL')), env('DB_TEST_DATABASE')),
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '5432'),
-            'database' => env('DB_DATABASE', 'statewars'),
+            // DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME and DB_PASSWORD work in place of DATABASE_URL (the URL wins if both are set)
+            'database' => env('DB_TEST_DATABASE', env('DB_DATABASE', 'statewars')),
             'username' => env('DB_USERNAME', 'postgres'),
             'password' => env('DB_PASSWORD', ''),
             'charset' => 'utf8',

@@ -6,14 +6,14 @@ use Illuminate\Support\Facades\DB;
 // Initial schema: the same DDL as the Node API's src/db/migrations/001_init.ts (PostgreSQL only), except the
 // `sessions` table, replaced by Sanctum's personal_access_tokens (next migration). Kept as raw SQL so CHECKs,
 // arrays, partial and expression indexes are exactly the Node ones.
+// One more difference: no CREATE EXTENSION pgcrypto. Node asks for it only for gen_random_uuid(), which is built
+// into PostgreSQL 13 and later, and hosted databases often refuse CREATE EXTENSION.
 // Never edit a migration that has run in production: add a new file instead.
 return new class extends Migration
 {
     public function up(): void
     {
         DB::unprepared(<<<'SQL'
-            CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
             CREATE TABLE states (
               code   char(2) PRIMARY KEY,
               name   text NOT NULL UNIQUE,
